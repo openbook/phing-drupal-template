@@ -251,7 +251,7 @@ from parent `lint-js` targets. -->
     </php>
     <httpget url="${jslint4java.url}"
              dir="${jslint4java.dir}"
-             proxy="${phing.httpget.proxy}" />
+             proxy="${phing.httpget.proxy}"/>
     <unzip file="${jslint4java.dir}/${jslint4java.zipfile}"
            todir="${jslint4java.dir}" />
 
@@ -695,7 +695,8 @@ Execution of this target can be skipped by setting the
     </phingcall>
 
     <if>
-      <isset property="drupal.uri" />
+      <isset property="drupal.uri"/>
+
       <then>
 
         <!-- Get a list of all available test cases -->
@@ -714,33 +715,51 @@ Execution of this target can be skipped by setting the
 
         <!-- Load the list of tests but keep only the test groups matching our
              prefixes. -->
-        <loadfile property="project.simpletest.tests"
-                  file="${project.logdir}/tests.txt">
-          <filterchain>
-            <linecontainsregexp>
-              <regexp pattern="${project.code.prefix.regex}" ignoreCase="true"/>
-            </linecontainsregexp>
-          </filterchain>
-        </loadfile>
 
-        <!-- Transform the list of filtered test groups in the form
+        <if>
+          <isset property="project.simpletest.group"/>
 
-        Groupname 1             Groupname 1
-        Groupname 2             Groupname 2
+          <then>
 
-        into a list of comma separated unique group names `Groupname 1,Groupname 2`. -->
-        <php expression="implode(',', array_unique(preg_split('/(\s{2,}|\r|\n)/', trim('${project.simpletest.tests}', PREG_SPLIT_NO_EMPTY))))"
-             returnProperty="project.simpletest.tests"/>
+            <property name="project.simpletest.tests" value="${project.simpletest.group}"/> 
+
+          </then>
+
+          <else>
+
+            <loadfile property="project.simpletest.tests"
+                      file="${project.logdir}/tests.txt">
+              <filterchain>
+                <linecontainsregexp>
+                  <regexp pattern="${project.code.prefix.regex}" ignoreCase="true"/>
+                </linecontainsregexp>
+              </filterchain>
+            </loadfile>
+
+            <!-- Transform the list of filtered test groups in the form
+
+            Groupname 1             Groupname 1
+            Groupname 2             Groupname 2
+
+            into a list of comma separated unique group names `Groupname 1,Groupname 2`. -->
+
+            <php expression="implode(',', array_unique(preg_split('/(\s{2,}|\r|\n)/', trim('${project.simpletest.tests}', PREG_SPLIT_NO_EMPTY))))"
+                 returnProperty="project.simpletest.tests"/>
+
+            </else>
+
+        </if>
 
         <!-- Run the tests and generate JUnit XML reports. This requires
              Drush 4.5 or newer or [a patch](http://drupal.org/node/1109408). -->
         <drush command="test-run" uri="${drupal.uri}" root="${project.drupal.dir}" haltonerror="false">
           <param>${project.simpletest.tests}</param>
           <option name="xml">${project.testdir}</option>
-          </drush>
+        </drush>
+        <echo msg="Running tests: ${project.simpletest.tests} from ${project.logdir}/tests.txt"/>
       </then>
       <else>
-        <echo msg="You must set the drupal.uri property to get simpletests working." />
+        <echo msg="You must set the drupal.uri property to get simpletests working."/>
       </else>
     </if>
     
@@ -752,7 +771,7 @@ Execution of this target can be skipped by setting the
 Uses [phpDocumentor](http://www.phpdoc.org/) to generate documentation. -->
   <target name="phpdoc"
           description="Generate API documentation using phpDocumentor">
-    <mkdir dir="${project.buildir}/api"/>
+    <mkdir dir="${project.builddir}/api"/>
     <phpdoc title="API Documentation"
             destdir="${project.builddir}/api"
             sourcecode="php"
@@ -970,7 +989,7 @@ called from `init` target. -->
         </if>
 
         <if>
-          <isset property="drupal.make.rewritebase" />
+          <isset property="drupal.make.rewritebase"/>
           <then>
             <reflexive file="${project.drupal.dir}/.htaccess">
               <filterchain>
@@ -1127,10 +1146,15 @@ Configuration of which installation profile and database to use in done in
   <target name="site-install"
           depends="init, setup-phing-drush"
           unless="project.installed">
+
     <drush command="site-install" assume="yes">
+      <option name="db-url">${drupal.db.url}</option>
+      <option name="account-name">${drupal.admin.username}</option>
+      <option name="account-pass">${drupal.admin.password}</option>
       <option name="db-url">${drupal.db.url}</option>
       <param>${drupal.profile}</param>
     </drush>
+
     <!-- Fix permissions for the default site directory and settings. The
          owner must be able to delete the directories during subsequent
          builds. -->
@@ -1139,9 +1163,36 @@ Configuration of which installation profile and database to use in done in
     <chmod file="${project.drupal.dir}/sites/default/default.settings.php"
            mode="0755" failonerror="true"/>
 
+    <!-- clear the drupal cache to ensure features and other settings are 
+         correctly loaded -->
+    <drush command="cache-clear">
+      <param>all</param>
+    </drush>
+
     <!-- Set property to prevent target from being executed multiple times -->
     <property name="project.installed" value="true"/>
   </target>
+
+  <!-- ### Run migration tasks
+
+    Runs drush migrate commands using values passed from properties file-->
+  <target name="migrate-content"
+          depends="init, setup-phing-drush, site-install">
+
+    <!-- Enable the module -->
+    <phingcall target="enable-module">
+      <property name="module" value="migrate"/>
+    </phingcall>
+    <phingcall target="enable-module">
+      <property name="module" value="migrate_extras"/>
+    </phingcall>     
+
+    <drush command="migrate-import">
+      <option name="update"></option>
+      <param>${project.migration.tasks}</param>
+    </drush>
+
+  </target>  
 
   <!-- ### Download and enable a project/module -->
   <target name="enable-module"
@@ -1208,7 +1259,7 @@ Configuration of which installation profile and database to use in done in
       <then>
         <httpget url="${patch.url}"
                  dir="${project.toolsdir}"
-                 proxy="${phing.httpget.proxy}" />
+                 proxy="${phing.httpget.proxy}"/>
         <patch patchfile="${project.toolsdir}/${patch.file}"
                dir="${patch.dir}" haltonfailure="true"/>
       </then>
