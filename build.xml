@@ -116,7 +116,7 @@ time and is largely obsolete when using GitHub. -->
   <target name="build" depends="init,
                                 clean,
                                 verify,
-                                analyze" />
+                                analyze" />                             
 
 <!-- ### Verify code consistency
 
@@ -915,7 +915,7 @@ called from `init` target. -->
     <property name="project.sitesdir"
               value="${project.drupal.dir}/${project.code.dir}" />
     <property name="project.builddir"
-              value="${project.basedir}/build" />
+              value="${project.drupal.dir}/build" />
     <property name="project.toolsdir"
               value="${project.builddir}/tools" />
     <property name="project.coveragedir"
@@ -1133,6 +1133,9 @@ called from `init` target. -->
     <mkdir dir="${project.logdir}"/>
     <mkdir dir="${project.testdir}"/>
 
+    <!-- Write to an empty test.xml file -->
+    <echo file="${project.testdir}/test.xml" append="false"></echo>
+
     <!-- Set property to prevent target from being executed multiple times -->
     <property name="project.cleaned" value="true"/>
   </target>
@@ -1149,6 +1152,8 @@ Configuration of which installation profile and database to use in done in
 
     <drush command="site-install" assume="yes">
       <option name="db-url">${drupal.db.url}</option>
+      <option name="site-name">${drupal.sitename}</option>
+      <option name="site-mail">${drupal.admin.mail}</option>      
       <option name="account-name">${drupal.admin.username}</option>
       <option name="account-pass">${drupal.admin.password}</option>
       <option name="db-url">${drupal.db.url}</option>
@@ -1159,7 +1164,7 @@ Configuration of which installation profile and database to use in done in
          owner must be able to delete the directories during subsequent
          builds. -->
     <chmod file="${project.drupal.dir}/sites/default/"
-           mode="0755" failonerror="true"/>
+           mode="0775" failonerror="true"/>
     <chmod file="${project.drupal.dir}/sites/default/default.settings.php"
            mode="0755" failonerror="true"/>
 
@@ -1187,11 +1192,30 @@ Configuration of which installation profile and database to use in done in
       <property name="module" value="migrate_extras"/>
     </phingcall>     
 
+    <!-- clear the drupal cache to ensure features and other settings are 
+         correctly loaded -->
+    <drush command="cache-clear">
+      <param>all</param>
+    </drush>
+
+    <if>
+      <not>
+        <equals arg1="${project.migration.tasks}" arg2="" />
+      </not>
+      <then>
     <drush command="migrate-import">
       <option name="update"></option>
       <param>${project.migration.tasks}</param>
     </drush>
-
+      </then>
+      <else>
+        <!-- ### Unable to add if statement to drush command, adding all flag here-->
+        <drush command="migrate-import">
+          <option name="all"></option>
+          <option name="update"></option>
+        </drush>         
+      </else>
+    </if>
   </target>  
 
   <!-- ### Download and enable a project/module -->
